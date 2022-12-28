@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::dynamics::{IslandManager, RigidBodyHandle};
 use crate::geometry::{
     Aabb, Collider, ColliderHandle, InteractionGroups, PointProjection, Qbvh, Ray, RayIntersection,
@@ -111,8 +112,12 @@ pub struct QueryFilter<'a> {
     pub groups: Option<InteractionGroups>,
     /// If set, this collider will be excluded from the scene query.
     pub exclude_collider: Option<ColliderHandle>,
+    /// If set, the set of colliders will be excluded from the scene query.
+    pub exclude_colliders: Option<&'a HashSet<ColliderHandle>>,
     /// If set, any collider attached to this rigid-body will be excluded from the scene query.
     pub exclude_rigid_body: Option<RigidBodyHandle>,
+    /// If set, any collider attached to the rigid bodies will be excluded from the scene query.
+    pub exclude_rigid_bodies: Option<&'a HashSet<RigidBodyHandle>>,
     /// If set, any collider for which this closure returns false will be excluded from the scene query.
     pub predicate: Option<&'a dyn Fn(ColliderHandle, &Collider) -> bool>,
 }
@@ -123,8 +128,10 @@ impl<'a> QueryFilter<'a> {
     #[inline]
     pub fn test(&self, bodies: &RigidBodySet, handle: ColliderHandle, collider: &Collider) -> bool {
         self.exclude_collider != Some(handle)
+            && (self.exclude_colliders.is_none() || !self.exclude_colliders.as_ref().unwrap().contains(&handle))
             && (self.exclude_rigid_body.is_none() // NOTE: deal with the `None` case separately otherwise the next test is incorrect if the collider’s parent is `None` too.
                 || self.exclude_rigid_body != collider.parent.map(|p| p.handle))
+            && (self.exclude_rigid_bodies.is_none() || collider.parent.is_none() || !self.exclude_rigid_bodies.as_ref().unwrap().contains(&collider.parent.unwrap().handle))
             && self
                 .groups
                 .map(|grps| collider.flags.collision_groups.test(grps))
@@ -214,9 +221,21 @@ impl<'a> QueryFilter<'a> {
         self
     }
 
+    /// Set the colliders that will be excluded from the scene query.
+    pub fn exclude_colliders(mut self, colliders: &'a HashSet<ColliderHandle>) -> Self {
+        self.exclude_colliders = Some(colliders);
+        self
+    }
+
     /// Set the rigid-body that will be excluded from the scene query.
     pub fn exclude_rigid_body(mut self, rigid_body: RigidBodyHandle) -> Self {
         self.exclude_rigid_body = Some(rigid_body);
+        self
+    }
+
+    /// Set the rigid-bodies that will be excluded from the scene query.
+    pub fn exclude_rigid_bodies(mut self, rigid_bodies: &'a HashSet<RigidBodyHandle>) -> Self {
+        self.exclude_rigid_bodies = Some(rigid_bodies);
         self
     }
 
